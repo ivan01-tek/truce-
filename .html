@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Truce 🤝</title>
+
+<!-- Tailwind via CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- React + ReactDOM + Babel via CDN (no build step needed) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap');
+
+  body {
+    background-color: #F8FAFC;
+    font-family: 'Inter', sans-serif;
+  }
+  .font-display { font-family: 'Bricolage Grotesque', 'Inter', sans-serif; }
+
+  /* --- Blob morph animation (signature element) --- */
+  @keyframes blobMorph {
+    0%   { border-radius: 62% 38% 55% 45% / 45% 55% 45% 55%; transform: rotate(0deg); }
+    33%  { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: rotate(6deg); }
+    66%  { border-radius: 55% 45% 62% 38% / 40% 60% 40% 60%; transform: rotate(-6deg); }
+    100% { border-radius: 62% 38% 55% 45% / 45% 55% 45% 55%; transform: rotate(0deg); }
+  }
+  .blob {
+    animation: blobMorph 7s ease-in-out infinite;
+    background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 55%, #BFDBFE 100%);
+  }
+
+  /* --- Ambient floating background shapes --- */
+  @keyframes floatA { 0%,100% { transform: translate(0,0); } 50% { transform: translate(14px, 24px); } }
+  @keyframes floatB { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-10px, -20px); } }
+  @keyframes floatC { 0%,100% { transform: translate(0,0); } 50% { transform: translate(0, 16px); } }
+  .float-a { animation: floatA 9s ease-in-out infinite; }
+  .float-b { animation: floatB 11s ease-in-out infinite; }
+  .float-c { animation: floatC 8s ease-in-out infinite; }
+
+  /* --- Step transition (fade + slide, replaces framer-motion) --- */
+  .step-enter {
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+  }
+  .step-enter-active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .step-exit {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  .step-exit-active {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.97);
+    transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+  }
+
+  /* --- Icon swap inside blob --- */
+  .icon-swap {
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  /* --- Progress dot --- */
+  .dot {
+    height: 8px;
+    border-radius: 9999px;
+    background-color: #DBEAFE;
+    transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease;
+  }
+  .dot.active { width: 26px; background-color: #2563EB; }
+  .dot.done { width: 8px; background-color: #2563EB; }
+  .dot.pending { width: 8px; background-color: #DBEAFE; }
+
+  textarea:focus { outline: none; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 1s linear infinite; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useCallback, useEffect, useRef } = React;
+
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+const QUESTIONS = [
+  {
+    key: "q1",
+    icon: "💬",
+    prompt: "hi good evening, how are you doing?",
+    placeholder: "tell me honestly...",
+  },
+  {
+    key: "q2",
+    icon: "❓",
+    prompt:
+      "so i'm skipping the formalities and going straight to why we stopped talking all of a sudden after talking things out?",
+    placeholder: "type your answer here...",
+  },
+  {
+    key: "q3",
+    icon: "💔",
+    prompt:
+      "do you just genuinely see me as a villain or a bad person no matter what i do to make things better between us?",
+    placeholder: "be real with me...",
+  },
+];
+
+const TRUCE_MESSAGE =
+  "well whatever it is I'm going to see and read it from my end and address it, i love my close friends and i actually don't like it when a close friend of mine doesn't want to talk to me at all, that's if you even consider me a friend at all (hehe) anyways, i'm hoping we can see past our differences and i hope I'm alive to witness the day you stop seeing me as a bad person, cause truth be told I'm not, we just don't see eye to eye 90% of the time, which isn't bad in its own way, what matters is what happens afterwards which is us settling and having peace in the air, then proceeds to fight again and make peace again, a vicious yet sweet cycle if i might say... no long talks, TRUCE 🤝";
+
+const WEB3FORMS_ACCESS_KEY = "399124c0-056f-4439-a9c3-1bf5392dd940";
+
+const BLOB_ICONS = ["💬", "❓", "💔", "🤝"];
+
+// ---------------------------------------------------------------------------
+// Small helper: mount/unmount transition wrapper (replaces AnimatePresence)
+// ---------------------------------------------------------------------------
+function Transition({ children, id }) {
+  const [cls, setCls] = useState("step-enter");
+  useEffect(() => {
+    setCls("step-enter");
+    const raf = requestAnimationFrame(() => setCls("step-enter step-enter-active"));
+    return () => cancelAnimationFrame(raf);
+  }, [id]);
+  return <div className={cls}>{children}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Signature element: morphing mood blob whose icon reflects progress
+// ---------------------------------------------------------------------------
+function MoodBlob({ step }) {
+  const icon = BLOB_ICONS[Math.min(step, BLOB_ICONS.length - 1)];
+  const [displayIcon, setDisplayIcon] = useState(icon);
+  const [iconCls, setIconCls] = useState("opacity-100 scale-100");
+
+  useEffect(() => {
+    setIconCls("opacity-0 scale-50");
+    const t1 = setTimeout(() => {
+      setDisplayIcon(icon);
+      setIconCls("opacity-0 scale-50");
+      requestAnimationFrame(() => setIconCls("opacity-100 scale-100"));
+    }, 180);
+    return () => clearTimeout(t1);
+  }, [icon]);
+
+  return (
+    <div className="blob mx-auto flex h-20 w-20 items-center justify-center shadow-lg shadow-blue-200">
+      <span className={`icon-swap text-3xl ${iconCls}`}>{displayIcon}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progress dots
+// ---------------------------------------------------------------------------
+function ProgressDots({ step, total }) {
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {Array.from({ length: total }).map((_, i) => {
+        const state = i === step ? "active" : i < step ? "done" : "pending";
+        return <div key={i} className={`dot ${state}`} />;
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main app
+// ---------------------------------------------------------------------------
+function TruceFlow() {
+  const [step, setStep] = useState(0); // 0-2 questions, 3 truce card, 4 result
+  const [answers, setAnswers] = useState({ q1: "", q2: "", q3: "" });
+  const [draft, setDraft] = useState("");
+  const [decision, setDecision] = useState(null);
+  const [submitState, setSubmitState] = useState("idle");
+
+  const totalQuestions = QUESTIONS.length;
+  const currentQuestion = QUESTIONS[step];
+
+  const handleNext = useCallback(() => {
+    if (!draft.trim()) return;
+    const current = QUESTIONS[step];
+    setAnswers((prev) => ({ ...prev, [current.key]: draft.trim() }));
+    setDraft("");
+    setStep((s) => s + 1);
+  }, [draft, step]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleNext();
+    }
+  };
+
+  const handleDecision = useCallback(async (choice) => {
+    setDecision(choice);
+    setSubmitState("loading");
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          access_key: WEB3FORMS_ACCESS_KEY,
+          subject: "New Reconciliation Response 🤝",
+          q1_response: answers.q1,
+          q2_response: answers.q2,
+          q3_response: answers.q3,
+          truce_decision: choice,
+        }),
+      });
+      const data = await res.json();
+      setSubmitState(data && data.success ? "success" : "error");
+    } catch (err) {
+      setSubmitState("error");
+    }
+    setStep(4);
+  }, [answers]);
+
+  return (
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-4 py-10">
+      {/* Ambient background blobs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="float-a absolute -top-24 -left-20 h-72 w-72 rounded-full opacity-40 blur-3xl"
+             style={{ background: "radial-gradient(circle at 30% 30%, #93C5FD, #3B82F6 60%, transparent 80%)" }} />
+        <div className="float-b absolute top-1/3 -right-24 h-80 w-80 rounded-full opacity-30 blur-3xl"
+             style={{ background: "radial-gradient(circle at 60% 40%, #BFDBFE, #2563EB 55%, transparent 80%)" }} />
+        <div className="float-c absolute bottom-0 left-1/4 h-64 w-64 rounded-full opacity-30 blur-3xl"
+             style={{ background: "radial-gradient(circle at 40% 60%, #DBEAFE, #60A5FA 60%, transparent 80%)" }} />
+      </div>
+
+      <div className="relative z-10 w-full max-w-lg">
+        {step < totalQuestions && (
+          <div className="mb-6">
+            <ProgressDots step={step} total={totalQuestions} />
+          </div>
+        )}
+
+        <div className="relative overflow-hidden rounded-[2rem] border border-blue-100 bg-white/90 px-7 py-9 shadow-2xl shadow-blue-100 backdrop-blur-sm sm:px-10 sm:py-11">
+
+          {step < totalQuestions && (
+            <Transition id={`q-${step}`}>
+              <div className="flex flex-col items-center text-center">
+                <MoodBlob step={step} />
+
+                <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-blue-500">
+                  question {step + 1} of {totalQuestions}
+                </p>
+
+                <h1 className="font-display mt-3 text-xl font-semibold leading-snug text-slate-800 sm:text-2xl">
+                  {currentQuestion.prompt}
+                </h1>
+
+                <textarea
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={currentQuestion.placeholder}
+                  rows={3}
+                  className="mt-6 w-full resize-none rounded-2xl border-2 border-blue-100 bg-blue-50/40 px-4 py-3 text-slate-700 placeholder-slate-400 transition-all focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                />
+
+                <button
+                  onClick={handleNext}
+                  disabled={!draft.trim()}
+                  className="font-display mt-6 flex items-center gap-2 rounded-full px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+                  style={{ background: "linear-gradient(135deg, #2563EB, #3B82F6)" }}
+                >
+                  Next
+                  <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            </Transition>
+          )}
+
+          {step === totalQuestions && (
+            <Transition id="truce">
+              <div className="flex flex-col items-center text-center">
+                <MoodBlob step={3} />
+
+                <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-blue-500">
+                  from me, to you
+                </p>
+
+                <p className="font-display mt-4 whitespace-pre-line text-left text-[0.95rem] leading-relaxed text-slate-700 sm:text-base">
+                  {TRUCE_MESSAGE}
+                </p>
+
+                <div className="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+                  <button
+                    onClick={() => handleDecision("Yes")}
+                    className="font-display flex items-center justify-center gap-2 rounded-full px-7 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-transform hover:scale-105 active:scale-95"
+                    style={{ background: "linear-gradient(135deg, #2563EB, #3B82F6)" }}
+                  >
+                    🤝 YES
+                  </button>
+                  <button
+                    onClick={() => handleDecision("No")}
+                    className="font-display flex items-center justify-center gap-2 rounded-full border-2 border-blue-200 bg-white px-7 py-3 text-sm font-bold text-blue-600 transition-transform hover:scale-105 active:scale-95"
+                  >
+                    😅 NO
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          )}
+
+          {step === 4 && (
+            <Transition id="result">
+              <div className="flex flex-col items-center text-center">
+                <div className="blob flex h-20 w-20 items-center justify-center shadow-lg shadow-blue-200">
+                  {submitState === "loading" ? (
+                    <span className="spin text-2xl">⏳</span>
+                  ) : (
+                    <span className="text-3xl">✅</span>
+                  )}
+                </div>
+
+                <h2 className="font-display mt-6 text-xl font-bold text-slate-800">
+                  {submitState === "loading"
+                    ? "sending this over..."
+                    : decision === "Yes"
+                    ? "truce sealed. 🤝"
+                    : "okay, noted. no pressure."}
+                </h2>
+
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-500">
+                  {submitState === "error"
+                    ? "hmm, the message didn't send — but your answer's been heard here either way."
+                    : decision === "Yes"
+                    ? "thank you for hearing me out. let's keep choosing peace, even after the messy parts."
+                    : "that's fair, take your time. this'll still be here whenever you're ready."}
+                </p>
+              </div>
+            </Transition>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<TruceFlow />);
+</script>
+</body>
+</html>
